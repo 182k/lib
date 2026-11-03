@@ -2983,6 +2983,8 @@ local UIEngine = (function()
 		return RunService:IsStudio() and "Studio" or "Unknown"
 	end
 
+	NativeLibrary.DetectExecutor = detectExecutor
+
 	local function detectGameName()
 		local success, result = pcall(function()
 			return Runtime.GetService("MarketplaceService"):GetProductInfo(game.PlaceId)
@@ -3162,11 +3164,19 @@ local UIEngine = (function()
 			Parent = sidebar,
 		})
 		window.TabList = scrollingFrame
-		window._navScrollCue = createScrollCue(window, scrollingFrame, sidebar, "Mais abas abaixo")
-		addPadding(scrollingFrame, 16, 16, 4, 4)
+		scrollingFrame.AutomaticCanvasSize = Enum.AutomaticSize.X
+		scrollingFrame.ScrollingDirection = Enum.ScrollingDirection.X
+		scrollingFrame.ScrollBarThickness = 2
+		window.TabStrip = createInstance("ScrollingFrame", {
+			Name = "TabStrip", Position = UDim2.fromOffset(0, 92), Size = UDim2.new(1, 0, 0, 38),
+			BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 2,
+			AutomaticCanvasSize = Enum.AutomaticSize.None, CanvasSize = UDim2.new(),
+			ScrollingDirection = Enum.ScrollingDirection.X, Parent = sidebar,
+		})
+		addPadding(scrollingFrame, 0, 0, 0, 0)
 		createInstance(
 			listLayoutClass,
-			{ SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4), Parent = scrollingFrame }
+			{ FillDirection = Enum.FillDirection.Horizontal, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 6), Parent = scrollingFrame }
 		)
 		local tabIndicator = createInstance(frameClass, {
 			AnchorPoint = Vector2.new(0, 0.5),
@@ -3664,7 +3674,7 @@ local UIEngine = (function()
 		end
 		self.Indicator.Visible = false
 		task.delay(0.15 + #self.Tabs * 0.05, function()
-			if self.CurrentTab then
+			if not self._destroyed and self.CurrentTab then
 				self:_placeIndicator(self.CurrentTab)
 			end
 		end)
@@ -3839,209 +3849,60 @@ local UIEngine = (function()
 
 	function NativeWindow:_layoutResponsive()
 		local compact = self._compactLayout == true
-		local width = self.Root.Size.X.Offset
-		local sidebarWidth = compact and (width < 420 and 108 or 148) or 172
-		self._sidebarWidth = sidebarWidth
-		local sidebar = self.Body:FindFirstChild("Sidebar")
-		if sidebar then
-			sidebar.Size = UDim2.new(0, sidebarWidth, 1, 0)
-			local header = sidebar:FindFirstChild("Header")
+		local contentTop = self._showTabStrip == false and 92 or 132
+		self._sidebarWidth = 0
+		local nav = self.Body:FindFirstChild("Sidebar")
+		if nav then
+			nav.Position = UDim2.fromOffset(12, 0)
+			nav.Size = UDim2.new(1, -24, 0, 130)
+			local header = nav:FindFirstChild("Header")
 			local left = header and header:FindFirstChild("Left")
-			local titleGroup = left and left:FindFirstChild("Title")
-			if titleGroup then
-				titleGroup.Position = UDim2.fromOffset(compact and 38 or 60, compact and 18 or 25)
-				titleGroup.Size = UDim2.new(1, compact and -44 or -64, 0, compact and 48 or 40)
-				for _, label in ipairs(titleGroup:GetChildren()) do
-					if label:IsA("TextLabel") then
-						local title = label.Name == "Title"
-						label.TextWrapped = compact
-						label.TextTruncate = compact and Enum.TextTruncate.None or Enum.TextTruncate.AtEnd
-						label.TextSize = compact and (title and 12 or 11) or (title and 14 or 13)
-						label.Position = UDim2.fromOffset(0, title and 0 or (compact and 30 or 20))
-						label.Size = UDim2.new(1, 0, 0, title and (compact and 28 or 20) or 14)
+			if header then header.Size = UDim2.new(1, 0, 0, 48) end
+			if left then
+				left.Size = UDim2.new(1, 0, 1, 0)
+				local title = left:FindFirstChild("Title")
+				if title then
+					title.Position = UDim2.fromOffset(40, 7)
+					title.Size = UDim2.fromOffset(compact and 120 or 180, 34)
+					for _, label in ipairs(title:GetChildren()) do
+						if label:IsA("TextLabel") then
+							local primary = label.Name == "Title"
+							label.Position = UDim2.fromOffset(0, primary and 0 or 20)
+							label.Size = UDim2.new(1, 0, 0, primary and 20 or 14)
+							label.TextSize = primary and 16 or 11
+							label.TextWrapped = false
+							label.TextTruncate = Enum.TextTruncate.AtEnd
+						end
 					end
 				end
-			end
-			if left then
+				local badge = left:FindFirstChild("Executor")
+				if badge and title then
+					local primary = title:FindFirstChild("Title")
+					local x = 52 + (primary and primary.TextBounds.X or 100)
+					badge.Position = UDim2.fromOffset(x, 8)
+					badge.Size = UDim2.fromOffset(math.max(0, self.Root.Size.X.Offset - x - 170), 20)
+					badge.Visible = badge.Size.X.Offset >= 24
+				end
 				for _, image in ipairs(left:GetChildren()) do
 					if image:IsA("ImageLabel") then
-						image.Position = UDim2.fromOffset(compact and 8 or 22, compact and 23 or 27)
-						image.Size = UDim2.fromOffset(compact and 24 or 30, compact and 24 or 28)
+						image.Position = UDim2.fromOffset(0, 8)
+						image.Size = UDim2.fromOffset(32, 32)
 					end
 				end
 			end
-			local footer = sidebar:FindFirstChild("KeybindFooter")
-			if footer then
-				footer.Position = UDim2.new(0, compact and 10 or 22, 1, -36)
-				footer.Size = UDim2.new(1, compact and -20 or -44, 0, 22)
-				for _, label in ipairs(footer:GetChildren()) do
-					if label:IsA("TextLabel") then
-						label.Text = compact and "Menu" or "Abrir / minimizar"
-					end
-				end
-			end
+			local footer = nav:FindFirstChild("KeybindFooter")
+			if footer then footer.Visible = false end
 		end
 		local divider = self.Body:FindFirstChild("SidebarDivider")
-		if divider then
-			divider.Position = UDim2.new(0, sidebarWidth, 0, 28)
-		end
-		self.Content.Position = UDim2.fromOffset(sidebarWidth + 1, 0)
-		self.Content.Size = UDim2.new(1, -sidebarWidth - 1, 1, 0)
-		local tabPadding = self.TabList and self.TabList:FindFirstChildOfClass("UIPadding")
-		if tabPadding then
-			tabPadding.PaddingLeft = UDim.new(0, compact and 8 or 16)
-			tabPadding.PaddingRight = tabPadding.PaddingLeft
-		end
-		for _, tab in ipairs(self.Tabs) do
-			if tab._label then
-				tab._label.TextSize = compact and 12 or 14
-				tab._label.TextWrapped = compact
-				tab._label.TextTruncate = compact and Enum.TextTruncate.None or Enum.TextTruncate.AtEnd
-			end
-			if tab._button then
-				tab._button.Size = UDim2.new(1, 0, 0, compact and 44 or (isTouchDevice and 40 or 36))
-			end
-			if tab._heading then
-				tab._heading.TextSize = compact and 18 or 22
-			end
-			local padding = tab.List and tab.List:FindFirstChildOfClass("UIPadding")
-			if padding then
-				padding.PaddingLeft = UDim.new(0, compact and 8 or 16)
-				padding.PaddingRight = padding.PaddingLeft
-				padding.PaddingBottom = UDim.new(0, compact and 12 or 24)
-			end
-			local layout = tab.List and tab.List:FindFirstChildOfClass("UIListLayout")
-			if layout then
-				layout.Padding = UDim.new(0, compact and 6 or 8)
-			end
-		end
-		if sidebar then
-			sidebar.Position = UDim2.fromOffset(10, 10)
-			sidebar.Size = UDim2.new(0, sidebarWidth, 1, -20)
-			sidebar.BackgroundColor3 = nativeTheme.Surface
-			sidebar.BackgroundTransparency = 0.12
-			if not sidebar:FindFirstChildOfClass("UIStroke") then
-				local stroke = addStroke(sidebar, nativeTheme.Stroke)
-				stroke.LineJoinMode = Enum.LineJoinMode.Miter
-			end
-			local header = sidebar:FindFirstChild("Header")
-			local left = header and header:FindFirstChild("Left")
-			local titleGroup = left and left:FindFirstChild("Title")
-			local narrow = sidebarWidth < 160
-			if header then header.Size = UDim2.new(1, 0, 0, narrow and 104 or 76) end
-			if titleGroup then
-				titleGroup.Position = UDim2.fromOffset(narrow and 8 or (compact and 60 or 68), narrow and 48 or 14)
-				titleGroup.Size = UDim2.new(1, narrow and -16 or (compact and -68 or -76), 0, 48)
-				for _, label in ipairs(titleGroup:GetChildren()) do
-					if label:IsA("TextLabel") then
-						local isTitle = label.Name == "Title"
-						label.TextSize = isTitle and (narrow and 14 or (compact and 16 or 18)) or 14
-						label.Position = UDim2.fromOffset(0, isTitle and 0 or 26)
-						label.Size = UDim2.new(1, 0, 0, isTitle and 26 or 20)
-						label.TextTransparency = 0
-						label.TextWrapped = false
-						label.TextTruncate = Enum.TextTruncate.AtEnd
-						label.TextXAlignment = narrow and Enum.TextXAlignment.Center or Enum.TextXAlignment.Left
-						if not isTitle then label.TextColor3 = nativeTheme.Muted:Lerp(nativeTheme.Text, 0.35) end
-					end
-				end
-			end
-			if left then
-				for _, image in ipairs(left:GetChildren()) do
-					if image:IsA("ImageLabel") then
-						local logoSize = narrow and 44 or (compact and 48 or 56)
-						image.Position = UDim2.fromOffset(narrow and (sidebarWidth - logoSize) / 2 or 6, narrow and 0 or 6)
-						image.Size = UDim2.fromOffset(logoSize, logoSize)
-						image.ImageTransparency = 0
-					end
-				end
-			end
-			local profileChip = sidebar:FindFirstChild("ArbixProfile")
-			if not profileChip then
-				profileChip = createInstance("Frame", {
-					Name = "ArbixProfile", BackgroundColor3 = nativeTheme.Surface2,
-					BackgroundTransparency = 0.25, BorderSizePixel = 0, Parent = sidebar,
-				})
-				addCorner(profileChip, UDim.new(0, 11))
-				local player = Runtime.GetService("Players").LocalPlayer
-				local avatar = createInstance("ImageLabel", {
-					Name = "Avatar", BackgroundTransparency = 1,
-					Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(player.UserId) .. "&w=150&h=150",
-					Size = UDim2.fromOffset(30, 30), Position = UDim2.fromOffset(8, 9), Parent = profileChip,
-				})
-				addCorner(avatar, UDim.new(1, 0))
-				createLabel({ Name = "DisplayName", Text = player.DisplayName, TextSize = 13,
-					Position = UDim2.fromOffset(46, 7), Size = UDim2.new(1, -54, 0, 18), Parent = profileChip })
-				createLabel({ Name = "Username", Text = "@" .. player.Name, TextSize = 11,
-					TextColor3 = nativeTheme.Muted, Position = UDim2.fromOffset(46, 25),
-					Size = UDim2.new(1, -54, 0, 16), Parent = profileChip })
-			end
-			profileChip.Position = UDim2.new(0, 8, 1, -94)
-			profileChip.Size = UDim2.new(1, -16, 0, 48)
-			local navTop = narrow and 104 or 76
-			self.TabList.Position = UDim2.fromOffset(0, navTop)
-			self.TabList.Size = UDim2.new(1, 0, 1, -navTop - 102)
-			if isTouchDevice then
-				if header then header.Size = UDim2.new(1, 0, 0, 76) end
-				if titleGroup then
-					titleGroup.Position = UDim2.fromOffset(8, 36)
-					titleGroup.Size = UDim2.new(1, -16, 0, 36)
-					for _, label in ipairs(titleGroup:GetChildren()) do
-						if label:IsA("TextLabel") then
-							label.TextSize = 12
-							label.Position = UDim2.fromOffset(0, label.Name == "Title" and 0 or 18)
-							label.Size = UDim2.new(1, 0, 0, 16)
-							label.TextXAlignment = Enum.TextXAlignment.Center
-						end
-					end
-				end
-				if left then
-					for _, image in ipairs(left:GetChildren()) do
-						if image:IsA("ImageLabel") then
-							image.Size = UDim2.fromOffset(32, 32)
-							image.Position = UDim2.fromOffset((sidebarWidth - 32) / 2, 0)
-						end
-					end
-				end
-				profileChip.Position, profileChip.Size = UDim2.new(0, 8, 1, -80), UDim2.new(1, -16, 0, 36)
-				local avatar = profileChip:FindFirstChild("Avatar")
-				if avatar then avatar.Size, avatar.Position = UDim2.fromOffset(24, 24), UDim2.fromOffset(6, 6) end
-				local display = profileChip:FindFirstChild("DisplayName")
-				if display then display.Position, display.Size = UDim2.fromOffset(36, 9), UDim2.new(1, -42, 0, 18) end
-				local username = profileChip:FindFirstChild("Username")
-				if username then username.Visible = false end
-				local mobileFooter = self.Root.Size.Y.Offset < 360 and 40 or 88
-				profileChip.Visible = mobileFooter == 88
-				self.TabList.Position = UDim2.fromOffset(0, 76)
-				self.TabList.Size = UDim2.new(1, 0, 1, -76 - mobileFooter - 24)
-				if self._navScrollCue then self._navScrollCue.Position = UDim2.new(0, 8, 1, -mobileFooter - 24) end
-			end
-		end
 		if divider then divider.Visible = false end
-		self.Content.Position = UDim2.fromOffset(sidebarWidth + 20, 0)
-		self.Content.Size = UDim2.new(1, -sidebarWidth - 30, 1, -10)
+		if self._navScrollCue then self._navScrollCue.Visible = false end
+		self.TabList.Position = UDim2.fromOffset(0, 52)
+		self.TabList.Size = UDim2.new(1, 0, 0, 38)
+		self.Content.Position = UDim2.fromOffset(12, contentTop)
+		self.Content.Size = UDim2.new(1, -24, 1, -contentTop - 12)
 		for _, tab in ipairs(self.Tabs) do
-			if tab._heading then
-				tab._heading.FontFace = Font.fromEnum(Enum.Font.Garamond)
-				tab._heading.TextSize = compact and 26 or 34
-			end
-			if isTouchDevice then
-				local headerHeight = tab._description and 68 or 48
-				tab._headerHeight = headerHeight
-				if tab._heading then
-					tab._heading.Position, tab._heading.Size = UDim2.fromOffset(8, 8), UDim2.new(1, -16, 0, 32)
-					tab._heading.TextSize = 26
-				end
-				if tab._description then
-					tab._description.Position, tab._description.Size = UDim2.fromOffset(8, 44), UDim2.new(1, -16, 0, 16)
-				end
-				if tab.List then
-					tab.List.Position = UDim2.fromOffset(0, headerHeight)
-					tab.List.Size = UDim2.new(1, 0, 1, -headerHeight - 24)
-				end
-			end
+			if tab._heading then tab._heading.FontFace = nativeFonts.Bold;tab._heading.TextSize = 22 end
 		end
-
 	end
 
 	local function availableWindowSize(viewport)
@@ -4208,18 +4069,18 @@ local UIEngine = (function()
 			ZIndex = 20,
 			Parent = self.Root,
 		})
-		local resizeIcon, resizingWindow =
-			createInstance("ImageLabel", {
-				AnchorPoint = Vector2.new(0.5, 0.5),
-				Position = UDim2.new(0.5, -16, 0.5, -16),
-				Size = UDim2.fromOffset(96, 96),
-				BackgroundTransparency = 1,
-				Image = "rbxassetid://120997033468887",
-				ImageColor3 = nativeTheme.Accent,
-				ImageTransparency = 0.8,
-				ZIndex = 20,
-				Parent = resizeHandle,
-			}), false
+		resizeHandle.Name = "ResizeHandle"
+		resizeHandle:SetAttribute("NoDrag", true)
+		local resizingWindow = false
+		local resizeIcon = createInstance("ImageLabel", {
+			Name = "ResizeCorner", AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.new(0.5, -10, 0.5, -10), Size = UDim2.fromOffset(64, 64),
+			BackgroundTransparency = 1, Image = "rbxassetid://120997033468887",
+			ImageColor3 = nativeTheme.Muted, ImageTransparency = 0.45, ZIndex = 20, Parent = resizeHandle,
+		})
+		local function setResizeActive(active)
+			animate(resizeIcon, {ImageTransparency = active and 0.1 or 0.45}, 0.12)
+		end
 		local startingSize = self.Root.Size
 		local resizeStart = Vector2.zero
 		local targetSize
@@ -4228,17 +4089,17 @@ local UIEngine = (function()
 				resizingWindow = true
 				startingSize = self.Root.Size
 				resizeStart = getPointerPosition()
-				animate(resizeIcon, { ImageTransparency = 0.35 }, 0.1)
+				setResizeActive(true)
 			end
 		end)
 		resizeHandle.MouseEnter:Connect(function()
 			if not resizingWindow then
-				animate(resizeIcon, { ImageTransparency = 0.35 }, 0.1)
+				setResizeActive(true)
 			end
 		end)
 		resizeHandle.MouseLeave:Connect(function()
 			if not resizingWindow then
-				animate(resizeIcon, { ImageTransparency = 0.8 }, 0.17)
+				setResizeActive(false)
 			end
 		end)
 		table.insert(
@@ -4246,7 +4107,7 @@ local UIEngine = (function()
 			UserInputService.InputEnded:Connect(function(input)
 				if resizingWindow and isPrimaryInput(input) then
 					resizingWindow = false
-					animate(resizeIcon, { ImageTransparency = 0.8 }, 0.17)
+					setResizeActive(false)
 					if targetSize then
 						self.Root.Size = UDim2.fromOffset(targetSize.X, targetSize.Y)
 						self._preferredSize = self.Root.Size
@@ -4520,490 +4381,141 @@ local UIEngine = (function()
 		animate(page, { GroupTransparency = 0, Position = UDim2.fromOffset(0, delay) }, 0.32, Enum.EasingStyle.Quint)
 	end
 
-	function NativeWindow:_styleDashboardHome(tab, config)
-		if tab._dashboard then
-			return
-		end
+	function NativeWindow:_buildDashboardHome(config)
+		local tab = self:Tab({Name = config.Name or "Início", Icon = config.Icon or "house"})
+		tab._dashboard, tab._homeActions, tab._dashboardControls = true, {}, {}
+		if tab._heading then tab._heading.Visible = false end
 		local list = tab.List
-		local pageLayout = list:FindFirstChildWhichIsA("UIListLayout")
-		if pageLayout then pageLayout.Padding = UDim.new(0, 12) end
-		local values = tab._homeStatValues or {}
-		local access = tab._accessBadges
-		local welcome = access and access.Access.Parent.Parent.Parent
-		if not welcome then
-			for _, child in ipairs(list:GetChildren()) do
-				if child:IsA("Frame") and child:FindFirstChildWhichIsA("ImageLabel") then
-					welcome = child
-					break
-				end
-			end
+		list.Position, list.Size = UDim2.fromOffset(0, 0), UDim2.fromScale(1, 1)
+		local padding = list:FindFirstChildOfClass("UIPadding")
+		if padding then
+			padding.PaddingTop, padding.PaddingBottom = UDim.new(0, 24), UDim.new(0, 24)
+			padding.PaddingLeft, padding.PaddingRight = UDim.new(0, 20), UDim.new(0, 20)
 		end
-		if not welcome then
-			return
-		end
-		tab._dashboard = true
-		tab._homeActions = {}
-		tab._dashboardControls = {}
-		local system = list:FindFirstChild("SystemInfo")
-		if system then
-			system.Visible = false
-		end
-
-		local function card(name, parent, order, button)
-			local frame = createInstance(button and "TextButton" or "Frame", {
-				Name = name,
-				BackgroundColor3 = nativeTheme.Surface2,
-				BackgroundTransparency = 0.06,
-				BorderSizePixel = 0,
-				LayoutOrder = order or 0,
-				Parent = parent,
-			})
-			if button then
-				frame.Text = ""
-				frame.AutoButtonColor = false
-				frame.Selectable = true
-			end
-			frame:SetAttribute("NoDrag", true)
-			addCorner(frame, UDim.new(0, 12))
-			addStroke(frame, nativeTheme.Stroke)
-			return frame
-		end
-
-		local function label(parent, text, size, muted)
-			return createLabel({
-				Text = text,
-				TextSize = size,
+		local layout = list:FindFirstChildOfClass("UIListLayout")
+		if layout then layout.Padding = UDim.new(0, 18) end
+		local function text(parent, name, value, size, muted)
+			return createLabel({Name = name, Text = value, TextSize = size,
 				FontFace = muted and nativeFonts.Regular or nativeFonts.Bold,
-				TextColor3 = muted and nativeTheme.Muted or nativeTheme.Text,
-				Parent = parent,
-			})
+				TextColor3 = muted and nativeTheme.Muted or nativeTheme.Text, Parent = parent})
 		end
-
-		local function moveValue(value, parent, textSize)
-			if not value then
-				return label(parent, "Indisponível", textSize, true)
-			end
-			value.Parent = parent
-			value.FontFace = nativeFonts.Medium
-			value.TextSize = textSize
-			return value
-		end
-		local top = createInstance("Frame", {
-			Name = "SessionDashboard",
-			Size = UDim2.new(1, 0, 0, 222),
-			BackgroundTransparency = 1,
-			LayoutOrder = 2,
-			Parent = list,
-		})
-		welcome.Parent = top
-		welcome.Name = "WelcomeCard"
-		welcome.BackgroundTransparency = 0.06
-		local avatar, welcomeText, subtitle
-		for _, child in ipairs(welcome:GetChildren()) do
-			if child:IsA("ImageLabel") then
-				avatar = child
-			elseif child:IsA("TextLabel") then
-				if not welcomeText then
-					welcomeText = child
-				else
-					subtitle = child
-				end
-			end
-		end
-		if avatar then
-			avatar.Position = UDim2.fromOffset(16, 16)
-			avatar.Size = UDim2.fromOffset(48, 48)
-		end
-		if welcomeText then
-			welcomeText.Text = "Bem-vindo, " .. localPlayer.DisplayName
-			welcomeText.TextSize = 17
-			welcomeText.FontFace = nativeFonts.Bold
-			welcomeText.Position = UDim2.fromOffset(80, 14)
-			welcomeText.Size = UDim2.new(1, -96, 0, 24)
-		end
-		if subtitle then
-			subtitle.Position = UDim2.fromOffset(80, 42)
-			subtitle.Size = UDim2.new(1, -96, 0, 18)
-			subtitle.Text = config.Greeting or "Sua sessão, em um só lugar."
-		end
-		local badgeRow = welcome:FindFirstChild("AccessBadges")
-		local badgeLayout = badgeRow and badgeRow:FindFirstChildWhichIsA("UIListLayout")
-		if badgeRow then
-			badgeRow.Position = UDim2.fromOffset(16, 76)
-		end
-		local session = card("GameSessionCard", top)
-		local gameImage = createInstance("ImageLabel", {
-			Name = "GameThumbnail",
-			Position = UDim2.fromOffset(16, 16),
-			Size = UDim2.fromOffset(48, 48),
-			BackgroundColor3 = nativeTheme.Surface,
-			BorderSizePixel = 0,
-			Parent = session,
-		})
-		gameImage:SetAttribute("UIUnthemed", true)
-		addCorner(gameImage, UDim.new(0, 10))
-		gameImage.Image = tonumber(game.GameId)
-				and game.GameId > 0
-				and "rbxthumb://type=GameIcon&id=" .. tostring(game.GameId) .. "&w=150&h=150"
-			or nativeAssets.Logo
-		local gameName = moveValue(values.Game, session, 15)
-		gameName.Position = UDim2.fromOffset(80, 14)
-		gameName.Size = UDim2.new(1, -96, 0, 24)
-		local gameCaption = label(session, "Servidor atual", 12, true)
-		gameCaption.Position = UDim2.fromOffset(80, 42)
-		gameCaption.Size = UDim2.new(1, -96, 0, 18)
-		local stats = createInstance("Frame", {
-			Name = "SessionStats",
-			Position = UDim2.fromOffset(16, 84),
-			Size = UDim2.new(1, -32, 0, 48),
-			BackgroundTransparency = 1,
-			Parent = session,
-		})
-		createInstance("Frame", {
-			Name = "SessionDivider",
-			Position = UDim2.fromOffset(16, 74),
-			Size = UDim2.new(1, -32, 0, 1),
-			BackgroundColor3 = nativeTheme.Stroke,
-			BorderSizePixel = 0,
-			Parent = session,
-		})
-		local sessionFields = {}
-		for _, definition in ipairs({
-			{ Key = "Players", Title = "Jogadores" },
-			{ Key = "Uptime", Title = "Tempo de sessão" },
-			{ Key = "FPS", Title = "FPS" },
-			{ Key = "Ping", Title = "Ping" },
-		}) do
-			local heading = label(stats, definition.Title, 12, true)
-			local value = moveValue(values[definition.Key], stats, 16)
-			heading.Name = definition.Key .. "Heading"
-			value.Name = definition.Key .. "Value"
-			sessionFields[#sessionFields + 1] = { Heading = heading, Value = value }
-		end
-		local job = label(session, "", 11, true)
-		local jobID = tostring(game.JobId or "")
-		job.Text = jobID ~= "" and "ID " .. jobID:sub(1, 8) .. "…" .. jobID:sub(-4) or "ID indisponível"
-		job.Size = UDim2.new(1, -32, 0, 16)
-		local community = createInstance("Frame", {
-			Name = "ProfileCommunity",
-			BackgroundTransparency = 1,
-			Parent = welcome,
-		})
-		local communityDivider = createInstance("Frame", {
-			Name = "ProfileCommunityDivider",
-			BackgroundColor3 = nativeTheme.Stroke,
-			BorderSizePixel = 0,
-			Parent = welcome,
-		})
-		local invite = createInstance("TextButton", {
-			Name = "CopyDiscordInvite",
-			Size = UDim2.fromScale(1, 1),
-			BackgroundColor3 = nativeTheme.Surface3,
-			BackgroundTransparency = 1,
-			BorderSizePixel = 0,
-			Text = "",
-			AutoButtonColor = false,
-			Selectable = true,
-			Parent = community,
-		})
-		invite:SetAttribute("NoDrag", true)
-		addCorner(invite, UDim.new(0, 8))
-		local inviteBorder = addStroke(invite, nativeTheme.StrokeHover, 1)
-		local discordLogo = createInstance("ImageLabel", {
-			Name = "DiscordLogo",
-			Position = UDim2.fromOffset(8, 4),
-			Size = UDim2.fromOffset(20, 20),
-			BackgroundTransparency = 1,
-			Image = "rbxthumb://type=Asset&id=115249452401470&w=420&h=420",
-			ScaleType = Enum.ScaleType.Fit,
-			Parent = invite,
-		})
-		discordLogo:SetAttribute("UIUnthemed", true)
-		local communityTitle = label(invite, "Discord", 13, false)
-		communityTitle.Name = "CommunityTitle"
-		communityTitle.Position = UDim2.fromOffset(36, 4)
-		communityTitle.Size = UDim2.new(1, -44, 0, 20)
-		communityTitle.RichText = false
-		local memberCounts = label(invite, "Carregando comunidade…", 11, true)
-		memberCounts.Name = "CommunityMembers"
-		memberCounts.Position = UDim2.fromOffset(8, 28)
-		memberCounts.Size = UDim2.new(1, -16, 0, 32)
-		memberCounts.TextWrapped = true
-		memberCounts.TextTruncate = Enum.TextTruncate.None
-		local inviteLabel = label(invite, "Copiar convite", 11, true)
-		inviteLabel.Position = UDim2.fromOffset(8, 64)
-		inviteLabel.Size = UDim2.new(1, -44, 0, 16)
-		inviteLabel.TextColor3 = Color3.fromRGB(147, 197, 253)
-		createIcon(invite, "copy", inviteLabel.TextColor3, UDim2.new(1, -24, 0, 72))
-		local inviteHovered, inviteFocused, invitePressed = false, false, false
-		local function updateInviteState()
-			local highlighted = inviteHovered or inviteFocused
-			animate(invite, {
-				BackgroundColor3 = nativeTheme.Surface3,
-				BackgroundTransparency = invitePressed and 0.1 or highlighted and 0.35 or 1,
-			}, 0.12)
-			inviteBorder.Color = nativeTheme.StrokeHover
-			animate(inviteBorder, { Transparency = inviteFocused and 0 or 1 }, 0.12)
-		end
-		invite.MouseEnter:Connect(function()
-			inviteHovered = true
-			updateInviteState()
-		end)
-		invite.MouseLeave:Connect(function()
-			inviteHovered = false
-			invitePressed = false
-			updateInviteState()
-		end)
-		invite.SelectionGained:Connect(function()
-			inviteFocused = true
-			updateInviteState()
-		end)
-		invite.SelectionLost:Connect(function()
-			inviteFocused = false
-			invitePressed = false
-			updateInviteState()
-		end)
-		invite.InputBegan:Connect(function(input)
-			if
-				input.UserInputType == Enum.UserInputType.MouseButton1
-				or input.UserInputType == Enum.UserInputType.Touch
-			then
-				invitePressed = true
-				updateInviteState()
+		local hero = createInstance("Frame", {Name = "HomeHero", Size = UDim2.new(1, 0, 0, 122), BackgroundTransparency = 1, LayoutOrder = 1, Parent = list})
+		local title = text(hero, "Welcome", "Olá, " .. localPlayer.DisplayName .. ".", 32, false)
+		title.Position, title.Size = UDim2.fromOffset(0, 30), UDim2.new(1, 0, 0, 42)
+		local hint = text(hero, "Hint", "Suas funções estão nas categorias acima.", 13, true)
+		hint.Position, hint.Size = UDim2.fromOffset(0, 84), UDim2.new(1, 0, 0, 20)
+		local gameCard = createInstance("TextButton", {Name = "CurrentGame", Text = "", AutoButtonColor = false,
+			Size = UDim2.new(1, 0, 0, 76), BackgroundColor3 = nativeTheme.Surface2, BackgroundTransparency = 0.12,
+			BorderSizePixel = 0, LayoutOrder = 2, Parent = list})
+		gameCard:SetAttribute("NoDrag", true)
+		addStroke(gameCard, nativeTheme.Stroke, 0.5)
+		local logo = createInstance("ImageLabel", {Name = "GameIcon", Position = UDim2.fromOffset(16, 14), Size = UDim2.fromOffset(48, 48),
+			BackgroundTransparency = 1, Image = tonumber(game.GameId) and game.GameId > 0 and "rbxthumb://type=GameIcon&id=" .. tostring(game.GameId) .. "&w=150&h=150" or nativeAssets.Logo, Parent = gameCard})
+		logo:SetAttribute("UIUnthemed", true)
+		local gameName = text(gameCard, "GameName", config.GameName or "Roblox", 15, false)
+		gameName.Position, gameName.Size = UDim2.fromOffset(72, 15), UDim2.new(1, -116, 0, 22)
+		local gameHint = text(gameCard, "GameHint", config.Supported and "Abrir funções do jogo" or "Explore as funções gerais", 12, true)
+		gameHint.Position, gameHint.Size = UDim2.fromOffset(72, 41), UDim2.new(1, -116, 0, 18)
+		local arrow = createIcon(gameCard, "arrow-up-right", nativeTheme.Muted, UDim2.new(1, -30, 0.5, -8))
+		arrow.Visible = config.Supported == true
+		gameCard.Interactable = config.Supported == true
+		gameCard.Activated:Connect(function()
+			if not gameCard.Interactable then return end
+			for _, candidate in ipairs(self.Tabs) do
+				if candidate ~= tab and candidate._standalone then self:SelectTab(candidate);return end
 			end
 		end)
-		invite.InputEnded:Connect(function(input)
-			if
-				input.UserInputType == Enum.UserInputType.MouseButton1
-				or input.UserInputType == Enum.UserInputType.Touch
-			then
-				invitePressed = false
-				updateInviteState()
-			end
-		end)
-		invite.Activated:Connect(function()
-			local handler = tab._homeActions.Discord
-			if type(handler) == "function" then
-				invokeCallback(handler)
-			end
-		end)
-		local actions = createInstance("Frame", {
-			Name = "SessionActions",
-			Size = UDim2.new(1, 0, 0, 82),
-			BackgroundTransparency = 1,
-			LayoutOrder = 3,
-			Parent = list,
-		})
+		local heading = text(list, "ActionsHeading", "ATALHOS DA SESSÃO", 11, true)
+		heading.LayoutOrder, heading.Size = 3, UDim2.new(1, 0, 0, 16)
+		local actions = createInstance("Frame", {Name = "HomeActions", BackgroundTransparency = 1, LayoutOrder = 4, Size = UDim2.new(1, 0, 0, 64), Parent = list})
+		local grid = createInstance("UIGridLayout", {Name = "ActionGrid", SortOrder = Enum.SortOrder.LayoutOrder, CellPadding = UDim2.fromOffset(10, 10), Parent = actions})
 		local definitions = {
-			{ Id = "Rejoin", Title = "Reconectar", Desc = "Volta ao servidor em que você está.", Icon = "refresh-cw" },
-			{
-				Id = "ServerHop",
-				Title = "Trocar de servidor",
-				Desc = "Procura outro servidor para entrar.",
-				Icon = "arrow-left-right",
-			},
-			{ Id = "CopyJob", Title = "Copiar ID", Desc = "Copia o link deste servidor.", Icon = "copy" },
+			{Id = "Rejoin", Title = "Reconectar", Desc = "Entrar novamente", Icon = "refresh-cw"},
+			{Id = "ServerHop", Title = "Outro servidor", Desc = "Buscar outra sessão", Icon = "arrow-left-right"},
+			{Id = "Discord", Title = "Comunidade", Desc = "Copiar convite", Icon = "rbxthumb://type=Asset&id=115249452401470&w=420&h=420"},
 		}
 		for index, definition in ipairs(definitions) do
-			local button = card(definition.Id, actions, index, true)
-			local actionIcon = createIcon(button, definition.Icon, nativeTheme.Muted, UDim2.fromOffset(14, 14))
-			local title = label(button, definition.Title, 13, false)
-			title.Position = UDim2.fromOffset(14, 36)
-			title.Size = UDim2.new(1, -28, 0, 20)
-			local description = label(button, definition.Desc, 11, true)
-			description.Position = UDim2.fromOffset(14, 58)
-			description.Size = UDim2.new(1, -28, 0, 18)
+			local contentOffset = definition.Id == "Discord" and 0 or 22
+			local button = createInstance("TextButton", {Name = definition.Id, Text = "", AutoButtonColor = false,
+				BackgroundColor3 = nativeTheme.Surface2, BackgroundTransparency = 0.5, BorderSizePixel = 0, LayoutOrder = index, Parent = actions})
+			button:SetAttribute("NoDrag", true)
+			addStroke(button, nativeTheme.Stroke, 0.65)
+			local icon = createIcon(button, definition.Icon, nativeTheme.Muted, UDim2.new(0.5, 0, 0, 10 + contentOffset))
+			icon.AnchorPoint = Vector2.new(0.5, 0)
+			icon.Size = UDim2.fromOffset(28, 28)
+			createIcon(button, "chevron-right", nativeTheme.Muted, UDim2.new(1, -28, 0, 14))
+			local caption = text(button, "Title", definition.Title, 12, false)
+			caption.Position, caption.Size = UDim2.fromOffset(14, 44 + contentOffset), UDim2.new(1, -28, 0, 20)
+			caption.TextXAlignment = Enum.TextXAlignment.Center
+			local status = text(button, "Status", definition.Desc, 11, true)
+			status.Position, status.Size = UDim2.fromOffset(14, 68 + contentOffset), UDim2.new(1, -28, 0, 18)
+			status.TextXAlignment = Enum.TextXAlignment.Center
+			button.MouseEnter:Connect(function() if button.Interactable then animate(button, {BackgroundTransparency = 0.18}, 0.12) end end)
+			button.MouseLeave:Connect(function() animate(button, {BackgroundTransparency = 0.5}, 0.12) end)
 			button.Activated:Connect(function()
 				local handler = tab._homeActions[definition.Id]
-				if button.Interactable and type(handler) == "function" then
-					invokeCallback(handler)
-				end
+				if button.Interactable and type(handler) == "function" then invokeCallback(handler) end
 			end)
-			button.MouseEnter:Connect(function()
-				animate(button, { BackgroundColor3 = nativeTheme.Surface3 }, 0.12)
-			end)
-			button.MouseLeave:Connect(function()
-				animate(button, { BackgroundColor3 = nativeTheme.Surface2 }, 0.12)
-			end)
-			tab._dashboardControls[definition.Id] =
-				{ Button = button, Title = title, Description = description, Icon = actionIcon }
+			tab._dashboardControls[definition.Id] = {Button = button, Title = caption, Description = status, DefaultDescription = definition.Desc, Icon = icon}
 		end
-		local details = createInstance("Frame", {
-			Name = "SessionDetails",
-			Size = UDim2.new(1, 0, 0, 50),
-			BackgroundTransparency = 1,
-			LayoutOrder = 5,
-			Parent = list,
-		})
-		local detailFields = {}
-		for index, definition in ipairs({
-			{ Key = "Executor", Label = "Executor" },
-			{ Key = "Time", Label = "Horário" },
-			{ Key = "Memory", Label = "Memória Luau" },
-		}) do
-			local heading = label(details, definition.Label, 11, true)
-			heading.Position = UDim2.new((index - 1) / 3, 16, 0, 0)
-			heading.Size = UDim2.new(1 / 3, -32, 0, 16)
-			local value = moveValue(values[definition.Key], details, 13)
-			value.Position = UDim2.new((index - 1) / 3, 16, 0, 20)
-			value.Size = UDim2.new(1 / 3, -32, 0, 22)
-			detailFields[index] = { Heading = heading, Value = value }
+		local community = tab._dashboardControls.Discord
+		community.Icon:SetAttribute("UIUnthemed", true)
+		for _, image in ipairs(community.Icon:GetDescendants()) do
+			if image:IsA("ImageLabel") then image:SetAttribute("UIUnthemed", true);image.ImageColor3 = Color3.new(1, 1, 1) end
 		end
-
-		local function layout()
-			if self._destroyed or not list.Parent then
-				return
-			end
-			local scale, ancestor = 1, list
-			while ancestor and ancestor ~= self.Gui do
-				for _, child in ipairs(ancestor:GetChildren()) do
-					if child:IsA("UIScale") and child.Scale > 0 then
-						scale *= child.Scale
-					end
-				end
-				ancestor = ancestor.Parent
-			end
-			local width = list.AbsoluteSize.X / scale
-			local padding = list:FindFirstChildWhichIsA("UIPadding")
-			if padding then
-				width = width * (1 - padding.PaddingLeft.Scale - padding.PaddingRight.Scale)
-					- padding.PaddingLeft.Offset
-					- padding.PaddingRight.Offset
-			end
-			width = math.floor(width + 0.5)
-			if width <= 0 then
-				return
-			end
-			local compact = width < 430
-			local splitProfile = width >= 500
-			local communityWidth = 184
-			local profileWidth = splitProfile and width - communityWidth - 48 or width - 32
-			local verticalBadges = badgeRow and profileWidth < 260
-			local profileHeight = badgeRow and (verticalBadges and 140 or 112) or 80
-			local welcomeHeight = profileHeight + (splitProfile and 0 or 88)
-			if avatar then
-				avatar.Size = UDim2.fromOffset(splitProfile and 40 or 48, splitProfile and 40 or 48)
-			end
-			local textLeft = splitProfile and 68 or 80
-			if welcomeText then
-				welcomeText.Position = UDim2.fromOffset(textLeft, 14)
-				welcomeText.Size = UDim2.fromOffset(splitProfile and width - communityWidth - 112 or width - 96, 24)
-				welcomeText.TextSize = splitProfile and width < 600 and 15 or 17
-			end
-			if subtitle then
-				subtitle.Position = UDim2.fromOffset(textLeft, 42)
-				subtitle.Size = UDim2.fromOffset(splitProfile and width - communityWidth - 112 or width - 96, 18)
-			end
-			if badgeRow then
-				badgeRow.Size = UDim2.fromOffset(profileWidth, verticalBadges and 48 or 22)
-				if badgeLayout then
-					badgeLayout.FillDirection = verticalBadges and Enum.FillDirection.Vertical or Enum.FillDirection.Horizontal
-				end
-			end
-			community.Position = splitProfile and UDim2.new(1, -communityWidth - 16, 0, 12)
-				or UDim2.fromOffset(16, profileHeight)
-			community.Size = splitProfile and UDim2.fromOffset(communityWidth, 84) or UDim2.new(1, -32, 0, 84)
-			communityDivider.Position = splitProfile and UDim2.new(1, -communityWidth - 28, 0, 16)
-				or UDim2.fromOffset(16, profileHeight - 8)
-			communityDivider.Size = splitProfile and UDim2.new(0, 1, 1, -32) or UDim2.new(1, -32, 0, 1)
-			welcome.Position = UDim2.fromOffset(0, 0)
-			welcome.Size = UDim2.new(1, 0, 0, welcomeHeight)
-			local columns = width < 500 and 2 or 4
-			local rows = math.ceil(#sessionFields / columns)
-			for index, field in ipairs(sessionFields) do
-				local column, row = (index - 1) % columns, math.floor((index - 1) / columns)
-				field.Heading.Position = UDim2.new(column / columns, 0, 0, row * 56)
-				field.Heading.Size = UDim2.new(1 / columns, -12, 0, 16)
-				field.Value.Position = UDim2.new(column / columns, 0, 0, row * 56 + 20)
-				field.Value.Size = UDim2.new(1 / columns, -12, 0, 24)
-			end
-			stats.Size = UDim2.new(1, -32, 0, rows * 56 - 8)
-			local jobTop = 84 + rows * 56 + 8
-			job.Position = UDim2.fromOffset(16, jobTop)
-			local sessionHeight = jobTop + 28
-			session.Position = UDim2.fromOffset(0, welcomeHeight + 12)
-			session.Size = UDim2.new(1, 0, 0, sessionHeight)
-			top.Size = UDim2.new(1, 0, 0, welcomeHeight + 12 + sessionHeight)
-			actions.Size = UDim2.new(1, 0, 0, compact and 208 or 84)
-			for index, definition in ipairs(definitions) do
-				local control = tab._dashboardControls[definition.Id]
-				control.Button.Position = compact and UDim2.fromOffset(0, (index - 1) * 72)
-					or UDim2.new((index - 1) / 3, (index - 1) * 8 / 3, 0, 0)
-				control.Button.Size = compact and UDim2.new(1, 0, 0, 64) or UDim2.new(1 / 3, -16 / 3, 0, 84)
-				control.Icon.Position = compact and UDim2.new(0, 16, 0.5, 0) or UDim2.fromOffset(16, 18)
-				control.Title.Position = UDim2.fromOffset(compact and 48 or 16, compact and 10 or 34)
-				control.Title.Size = UDim2.new(1, compact and -64 or -32, 0, 20)
-				control.Description.Position = UDim2.fromOffset(compact and 48 or 16, compact and 34 or 56)
-				control.Description.Size = UDim2.new(1, compact and -64 or -32, 0, 18)
-			end
-			local narrowDetails = width < 360
-			details.Size = UDim2.new(1, 0, 0, narrowDetails and 84 or 50)
-			for index, field in ipairs(detailFields) do
-				field.Heading.Position = narrowDetails and UDim2.fromOffset(16, (index - 1) * 28)
-					or UDim2.new((index - 1) / 3, 16, 0, 0)
-				field.Heading.Size = narrowDetails and UDim2.new(0.5, -16, 0, 22)
-					or UDim2.new(1 / 3, -32, 0, 16)
-				field.Value.Position = narrowDetails and UDim2.new(0.5, 0, 0, (index - 1) * 28)
-					or UDim2.new((index - 1) / 3, 16, 0, 20)
-				field.Value.Size = narrowDetails and UDim2.new(0.5, -16, 0, 22)
-					or UDim2.new(1 / 3, -32, 0, 22)
-				field.Value.TextXAlignment = narrowDetails and Enum.TextXAlignment.Right or Enum.TextXAlignment.Left
-			end
+		local members = text(community.Button, "Members", "—", 15, false)
+		members.Position, members.Size = UDim2.fromOffset(14, 94), UDim2.new(0.5, -16, 0, 20)
+		local online = text(community.Button, "Online", "—", 15, false)
+		online.Position, online.Size = UDim2.new(0.5, 4, 0, 94), UDim2.new(0.5, -16, 0, 20)
+		local totalLabel = text(community.Button, "MembersCaption", "membros", 10, true)
+		totalLabel.Position, totalLabel.Size = UDim2.fromOffset(14, 116), UDim2.new(0.5, -16, 0, 14)
+		local onlineLabel = text(community.Button, "OnlineCaption", "online", 10, true)
+		onlineLabel.Position, onlineLabel.Size = UDim2.new(0.5, 4, 0, 116), UDim2.new(0.5, -16, 0, 14)
+		for _, label in ipairs({members, online, totalLabel, onlineLabel}) do label.TextXAlignment = Enum.TextXAlignment.Center end
+		onlineLabel.TextColor3 = Color3.fromRGB(126, 201, 160)
+		local nextCommunityRefresh, communityPending = 0, false
+		local function count(value)
+			if type(value) ~= "number" or value ~= value or value < 0 or value == math.huge then return "—" end
+			return tostring(math.floor(value)):reverse():gsub("(%d%d%d)", "%1."):reverse():gsub("^%.", "")
 		end
-		local communityPending, nextCommunityRefresh = false, 0
-		local function formatCount(value)
-			if type(value) ~= "number" or value ~= value or value < 0 or value == math.huge then
-				return "—"
-			end
-			local text = tostring(math.floor(value))
-			return text:reverse():gsub("(%d%d%d)", "%1."):reverse():gsub("^%.", "")
-		end
-
 		local function refreshCommunity()
-			if communityPending then
-				return
-			end
-			if type(config.CommunityProvider) ~= "function" then
-				memberCounts.Text = "Comunidade indisponível"
-				return
-			end
+			if self._destroyed or not community.Button.Parent or communityPending or os.clock() < nextCommunityRefresh or type(config.CommunityProvider) ~= "function" then return end
 			communityPending = true
 			nextCommunityRefresh = os.clock() + 180
 			task.spawn(function()
-				local success, data = pcall(config.CommunityProvider)
+				local ok, data = pcall(config.CommunityProvider)
 				communityPending = false
-				if self._destroyed or not community.Parent then
-					return
+				if self._destroyed or not community.Button.Parent then return end
+				if ok and type(data) == "table" then
+					members.Text, online.Text = count(data.Members), count(data.Online)
 				end
-				if not success or type(data) ~= "table" then
-					data = { Status = "Dados da comunidade indisponíveis" }
-				end
-				if type(data.Name) == "string" and data.Name ~= "" then
-					communityTitle.Text = data.Name
-				end
-				memberCounts.Text = type(data.Name) == "string"
-						and data.Name ~= ""
-						and formatCount(data.Online) .. " online\n" .. formatCount(data.Members) .. " membros"
-					or data.Status
-					or "Comunidade indisponível"
+				task.delay(180, function()
+					if not self._destroyed and self.Open and self.Gui.Enabled and self.CurrentTab == tab then refreshCommunity() end
+				end)
 			end)
 		end
 		tab._refreshCommunity = refreshCommunity
-		if self.Scale then
-			table.insert(self._connections, self.Scale:GetPropertyChangedSignal("Scale"):Connect(layout))
-		end
-		table.insert(self._connections, list:GetPropertyChangedSignal("AbsoluteSize"):Connect(layout))
-		self:_listen("Render", function()
-			if self.Open and self.Gui.Enabled and self.CurrentTab == tab and os.clock() >= nextCommunityRefresh then
-				refreshCommunity()
-			end
-		end)
-		tab._dashboardLayout = layout
-		layout()
 		refreshCommunity()
+		local function arrange()
+			if self._destroyed or not actions.Parent then return end
+			local scale = self.Scale and math.max(self.Scale.Scale, 0.01) or 1
+			local width = actions.AbsoluteSize.X / scale
+			local gap, height = 10, 140
+			local columns = math.clamp(math.floor((width + gap) / 190), 1, #definitions)
+			grid.FillDirectionMaxCells = columns
+			grid.CellSize = UDim2.fromOffset(math.max(1, math.floor((width - gap * (columns - 1)) / columns)), height)
+			actions.Size = UDim2.new(1, 0, 0, math.ceil(#definitions / columns) * (height + gap) - gap)
+			title.TextSize = width < 400 and 25 or 32
+		end
+		table.insert(self._connections, actions:GetPropertyChangedSignal("AbsoluteSize"):Connect(arrange))
+		table.insert(self._connections, self.Scale:GetPropertyChangedSignal("Scale"):Connect(arrange))
+		tab._dashboardLayout = arrange
+		task.defer(arrange)
+		return tab
 	end
 
 	function NativeWindow:_buildHome(homeConfig)
+		if homeConfig.Dashboard then return self:_buildDashboardHome(homeConfig) end
 		local frameClass, listLayoutClass, dragAttribute, executorLabel = "Frame", "UIListLayout", "NoDrag", "Executor"
 		local homeTab =
 			self:Tab({ Name = homeConfig.Name or "Home", Desc = homeConfig.Desc, Icon = homeConfig.Icon or "house" })
@@ -5565,7 +5077,7 @@ local UIEngine = (function()
 			NativeTab
 		)
 		local tabButton = createInstance("TextButton", {
-			Size = UDim2.new(1, 0, 0, isTouchDevice and 44 or 34),
+			Size = UDim2.fromOffset(math.clamp((utf8.len(tab.Name) or #tab.Name) * 7 + 46, 82, 180), 34),
 			BackgroundColor3 = nativeTheme.Surface2,
 			BackgroundTransparency = 1,
 			Text = "",
@@ -5933,14 +5445,16 @@ local UIEngine = (function()
 	-- Anchor selection to its button so collapsed groups and scrolling clip it naturally.
 	function NativeWindow:_placeIndicator(tab)
 		local indicator = self.Indicator
+		if tab._standalone then indicator.Visible = false;return end
 		indicator.Parent = tab._button
-		indicator.Rotation = 45
-		indicator.Position = UDim2.new(0, 3, 0.5, 0)
+		indicator.Rotation = 0
+		indicator.AnchorPoint = Vector2.new(0, 1)
+		indicator.Position = UDim2.new(0, 10, 1, 0)
 		if not indicator.Visible then
 			indicator.Visible = true
 			indicator.Size = UDim2.fromOffset(3, 0)
 		end
-		animate(indicator, { Size = UDim2.fromOffset(5, 5) }, 0.18, Enum.EasingStyle.Back)
+		animate(indicator, { Size = UDim2.new(1, -20, 0, 2) }, 0.12)
 	end
 
 	function NativeWindow:SelectTab(tab)
@@ -6093,7 +5607,7 @@ local UIEngine = (function()
 			Parent = self.NotifyHolder,
 		})
 		local notificationRoot = createInstance(frameClass, {
-			Position = UDim2.fromOffset(320, 0),
+			Position = UDim2.fromOffset(0, 8),
 			Size = UDim2.new(1, 0, 0, height),
 			BackgroundTransparency = 1,
 			Parent = notificationSlot,
@@ -6112,15 +5626,13 @@ local UIEngine = (function()
 		})
 		local notificationBody = createInstance("CanvasGroup", {
 			Size = UDim2.new(1, 0, 0, height),
-			BackgroundColor3 = nativeTheme.Background,
+			BackgroundColor3 = nativeTheme.Surface,
 			BorderSizePixel = 0,
 			GroupTransparency = 1,
 			Parent = notificationRoot,
 		})
-		addCorner(notificationBody, UDim.new(0, 10))
+		addCorner(notificationBody, UDim.new(0, 8))
 		addStroke(notificationBody, nativeTheme.Stroke)
-		addEdgeHighlight(notificationBody)
-		addGlow(notificationBody, UDim2.fromOffset(200, 90), UDim2.new(1, -10, 0, -10), 0.9, 90)
 		local notificationHeader = createInstance(frameClass, {
 			Size = UDim2.fromScale(1, 1),
 			BackgroundTransparency = 1,
@@ -6229,7 +5741,7 @@ local UIEngine = (function()
 				removeNotification()
 				return
 			end
-			animate(notificationRoot, { Position = UDim2.fromOffset(260, 0) }, 0.2, Enum.EasingStyle.Quint)
+			animate(notificationRoot, { Position = UDim2.fromOffset(0, 8) }, 0.16, Enum.EasingStyle.Quint)
 			animate(notificationBody, { GroupTransparency = 1 }, 0.15)
 			animate(notificationShadow, { ImageTransparency = 1 }, 0.15)
 			task.delay(0.2, function()
@@ -6260,7 +5772,7 @@ local UIEngine = (function()
 		end)
 		animate(notificationRoot, { Position = UDim2.fromOffset(0, 0) }, 0.25, Enum.EasingStyle.Quint)
 		animate(notificationBody, { GroupTransparency = 0 }, 0.2)
-		animate(notificationShadow, { ImageTransparency = 0.6 }, 0.2)
+		animate(notificationShadow, { ImageTransparency = 0.88 }, 0.2)
 		animate(progressFill, { Size = UDim2.fromScale(0, 1) }, duration, Enum.EasingStyle.Linear)
 		expiryThread = task.delay(duration, dismissNotification)
 		dismissButton.MouseButton1Click:Connect(dismissNotification)
@@ -9350,8 +8862,7 @@ local AdapterFactory = (function()
 			self._sidebarOrder += 1
 			local group = new("Frame", {
 				Name = config.Title or "SidebarSection",
-				Size = UDim2.new(1, 0, 0, 0),
-				AutomaticSize = Enum.AutomaticSize.Y,
+				Size = UDim2.fromOffset(math.max(74, (utf8.len(config.Title or "") or #(config.Title or "")) * 7 + 24), 30),
 				BackgroundTransparency = 1,
 				LayoutOrder = self._sidebarOrder,
 				Parent = self._native.TabList,
@@ -9365,7 +8876,7 @@ local AdapterFactory = (function()
 				FontFace = UIEngine.Fonts.Bold,
 				TextSize = 12,
 				TextColor3 = UIEngine.Theme.Text,
-				TextXAlignment = Enum.TextXAlignment.Left,
+				TextXAlignment = Enum.TextXAlignment.Center,
 				AutoButtonColor = false,
 				LayoutOrder = 1,
 				Parent = group,
@@ -9373,34 +8884,32 @@ local AdapterFactory = (function()
 			local title = new("TextLabel", {
 				Name = "Title",
 				Text = config.Title or "",
-				Size = UDim2.new(1, -20, 1, 0),
+				Size = UDim2.fromScale(1, 1),
 				BackgroundTransparency = 1,
 				FontFace = UIEngine.Fonts.Bold,
 				TextSize = 12,
 				TextColor3 = UIEngine.Theme.Text,
-				TextXAlignment = Enum.TextXAlignment.Left,
+				TextXAlignment = Enum.TextXAlignment.Center,
 				RichText = true,
 				Parent = header,
 			})
 			header:SetAttribute("NoDrag", true)
-			local icon = new("ImageLabel", {
-				AnchorPoint = Vector2.new(1, 0.5),
-				Position = UDim2.new(1, -2, 0.5, 0),
-				Size = UDim2.fromOffset(14, 14),
-				BackgroundTransparency = 1,
-				Parent = header,
-			})
-			setIcon(icon, "chevron-right", UIEngine.Theme.Muted)
+			local border = new("UIStroke", { Color = UIEngine.Theme.Stroke, Transparency = 0.65, Thickness = 1, LineJoinMode = Enum.LineJoinMode.Miter, Parent = header })
+			title.Position = UDim2.fromOffset(8, 0)
+			title.Size = UDim2.new(1, -28, 1, 0)
+			group.Size = UDim2.fromOffset(group.Size.X.Offset + 14, 30)
+			local chevron = new("ImageLabel", { Size = UDim2.fromOffset(12, 12), Position = UDim2.new(1, -18, 0.5, -6), BackgroundTransparency = 1, Parent = header })
+			setIcon(chevron, "chevron-down", UIEngine.Theme.Muted)
 			local list = new("Frame", {
 				Name = "Tabs",
-				Size = UDim2.new(1, 0, 0, 0),
-				AutomaticSize = Enum.AutomaticSize.Y,
+				Size = UDim2.new(0, 0, 1, -3),
+				AutomaticSize = Enum.AutomaticSize.X,
 				BackgroundTransparency = 1,
 				LayoutOrder = 2,
 				Visible = config.Opened == true,
-				Parent = group,
+				Parent = self._native.TabStrip,
 			})
-			new("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4), Parent = list })
+			new("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 4), Parent = list })
 			local section = {
 				Title = config.Title,
 				Frame = group,
@@ -9419,7 +8928,17 @@ local AdapterFactory = (function()
 			function section:SetOpened(opened)
 				self.Opened = opened == true
 				list.Visible = self.Opened
-				icon.Rotation = self.Opened and 90 or 0
+				title.TextColor3 = self.Opened and UIEngine.Theme.Text or UIEngine.Theme.Muted
+				header.BackgroundColor3 = UIEngine.Theme.Surface2
+				header.BackgroundTransparency = self.Opened and 0 or 1
+				border.Transparency = self.Opened and 0.15 or 0.65
+				if self.Opened then
+					for _, other in ipairs(self._window._navigationSections) do
+						if other ~= self then other:SetOpened(false) end
+					end
+					self._window._native.TabStrip.CanvasPosition = Vector2.zero
+					self._window._native.TabStrip.CanvasSize = UDim2.fromOffset(list.AbsoluteSize.X, 0)
+				end
 				return self
 			end
 			section.Open = function(self)
@@ -9429,10 +8948,19 @@ local AdapterFactory = (function()
 				return self:SetOpened(false)
 			end
 			section.SetOpen = section.SetOpened
+			self._navigationSections = self._navigationSections or {}
+			table.insert(self._navigationSections, section)
+			section._native = {Destroy = function() list:Destroy();group:Destroy() end}
 			section:SetOpened(section.Opened)
+			section._connections[#section._connections + 1] = connect(list:GetPropertyChangedSignal("AbsoluteSize"), function()
+				if section.Opened then self._native.TabStrip.CanvasSize = UDim2.fromOffset(list.AbsoluteSize.X, 0) end
+			end)
 			section._connections[#section._connections + 1] = connect(header.Activated, function()
 				if not section.Locked then
-					section:SetOpened(not section.Opened)
+					section:SetOpened(true)
+					for _, tab in ipairs(self.TabModule.Tabs) do
+						if tab._sidebarSection == section and not tab.Locked then tab:Select();break end
+					end
 				end
 			end)
 			self._children[section] = true
@@ -9465,7 +8993,8 @@ local AdapterFactory = (function()
 		end
 
 		function WindowMethods:_wrapTab(native, config, iconThemed)
-			if native._icon then
+			native._standalone = config.Standalone == true
+						if native._icon then
 				native._icon:SetAttribute("UIUnthemed", not iconThemed)
 			end
 			self._navigationGroups = self._navigationGroups or {}
@@ -9483,7 +9012,7 @@ local AdapterFactory = (function()
 				native._button.Parent = parent._list
 			end
 			self._sidebarOrder += 1
-			native._button.LayoutOrder = config.Standalone and 0 or (parent and #self.TabModule.Tabs + 1 or self._sidebarOrder)
+			native._button.LayoutOrder = config.Standalone and (config.NavigationOrder or 0) or (parent and #self.TabModule.Tabs + 1 or self._sidebarOrder)
 			local tab = context(self, native, native._page)
 			tab.Title, tab.Name = config.Title or config.Name, config.Title or config.Name
 			tab.Index = #self.TabModule.Tabs + 1
@@ -9541,9 +9070,6 @@ local AdapterFactory = (function()
 					Memory = "Memória Luau",
 				}
 			local native = self._native:_buildHome(config)
-			if config.Dashboard then
-				self._native:_styleDashboardHome(native, config)
-			end
 			local tab = self:_wrapTab(native, { Title = config.Name, Icon = config.Icon, Standalone = true }, true)
 			self.HomeTab = tab
 			return tab
@@ -9566,10 +9092,9 @@ local AdapterFactory = (function()
 			end
 			control.Button.Interactable = busy ~= true
 			control.Button.Active = busy ~= true
-			control.Button.BackgroundTransparency = busy and 0.35 or 0.06
-			if description then
-				control.Description.Text = description
-			end
+			control.Button.BackgroundTransparency = busy and 0.7 or 0.5
+			control.Description.Visible = true
+			control.Description.Text = description or control.DefaultDescription or ""
 			return true
 		end
 
@@ -9677,12 +9202,22 @@ local AdapterFactory = (function()
 					image.ImageColor3 = Color3.new(1, 1, 1)
 				end
 			end
+			local executorBadge = new("TextLabel", {Name = "Executor", Text = UIEngine.DetectExecutor(), TextSize = 11,
+				FontFace = UIEngine.Fonts.Medium, TextColor3 = UIEngine.Theme.Muted, BackgroundTransparency = 1,
+				TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, Parent = left})
+			local author = titleGroup:FindFirstChild("Author")
+			if author and config.Author == "Premium" then
+				author.TextColor3 = Color3.fromRGB(255, 221, 91)
+				author.TextStrokeTransparency = 1
+			end
 			local topbar = new("Frame", {
 				Name = "UITopbar",
 				Size = UDim2.new(1, 0, 0, 48),
 				BackgroundTransparency = 1,
-				Parent = native.Content,
+				Parent = native.Body,
 			})
+			local brandTitle = titleGroup:FindFirstChild("Title")
+			if brandTitle then table.insert(native._connections, brandTitle:GetPropertyChangedSignal("TextBounds"):Connect(function() native:_layoutResponsive() end)) end
 			native.DragHandles = { header, topbar }
 			local right = new("Frame", {
 				Name = "Right",
@@ -9769,8 +9304,33 @@ local AdapterFactory = (function()
 				end
 				if tab and tab._sidebarSection then
 					tab._sidebarSection:SetOpened(true)
+				elseif tab then
+					for _, section in ipairs(window._navigationSections or {}) do section:SetOpened(false) end
+				end
+				local showTabs = tab and tab._sidebarSection ~= nil
+				if native._showTabStrip ~= showTabs then
+					native._showTabStrip = showTabs
+					native.TabStrip.Visible = showTabs
+					native:_layoutResponsive()
 				end
 				nativeSelect(object, selected)
+				if selected._refreshCommunity then selected._refreshCommunity() end
+				task.defer(function()
+					if window._destroyed or native.CurrentTab ~= selected then return end
+					local scale = math.max(native.Scale.Scale, 0.01)
+					local function reveal(scroll, button)
+						local width = scroll.AbsoluteSize.X / scale
+						local left = (button.AbsolutePosition.X - scroll.AbsolutePosition.X) / scale + scroll.CanvasPosition.X
+						local right = left + button.AbsoluteSize.X / scale
+						local offset = scroll.CanvasPosition.X
+						if left < offset then offset = left elseif right > offset + width then offset = right - width end
+						scroll.CanvasPosition = Vector2.new(math.max(0, offset), 0)
+					end
+					if tab and tab._sidebarSection then
+						reveal(native.TabList, tab._sidebarSection.Frame)
+						reveal(native.TabStrip, selected._button)
+					else reveal(native.TabList, selected._button) end
+				end)
 				if window._layoutWebsiteCard then
 					window._layoutWebsiteCard()
 				end
